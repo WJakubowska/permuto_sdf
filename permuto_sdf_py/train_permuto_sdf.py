@@ -109,7 +109,7 @@ hyperparams=HyperParamsPermutoSDF()
 
 
 
-def run_net(args, hyperparams, ray_origins, ray_dirs, img_indices, model_sdf, model_rgb, model_bg, model_colorcal, occupancy_grid, iter_nr_for_anneal,  cos_anneal_ratio, forced_variance):
+def run_net(args, hyperparams, ray_origins, ray_dirs, img_indices, model_sdf, model_rgb, model_colorcal, occupancy_grid, iter_nr_for_anneal,  cos_anneal_ratio, forced_variance):
     with torch.set_grad_enabled(False):
         ray_points_entry, ray_t_entry, ray_points_exit, ray_t_exit, does_ray_intersect_box=model_sdf.boundary_primitive.ray_intersection(ray_origins, ray_dirs)
         TIME_START("create_samples")
@@ -144,39 +144,16 @@ def run_net(args, hyperparams, ray_origins, ray_dirs, img_indices, model_sdf, mo
     TIME_END("render_fg") #7.2ms in PermutoSDF   
 
 
-
-    # print("bg_ray_samples_packed.samples_pos_4d",bg_ray_samples_packed.samples_pos_4d)
-
-    TIME_START("render_bg")    
-    #run nerf bg
-    if args.with_mask:
-        pred_rgb_bg=None
-    # else: #have to model the background
-    elif bg_ray_samples_packed.samples_pos_4d.shape[0]!=0: #have to model the background
-        #compute rgb and density
-        rgb_samples_bg, density_samples_bg=model_bg( bg_ray_samples_packed.samples_pos_4d, bg_ray_samples_packed.samples_dirs, iter_nr_for_anneal, model_colorcal, img_indices, ray_start_end_idx=bg_ray_samples_packed.ray_start_end_idx) 
-        #volumetric integration
-        weights_bg, weight_sum_bg, _= model_bg.volume_renderer_nerf.compute_weights(bg_ray_samples_packed, density_samples_bg.view(-1,1))
-        pred_rgb_bg=model_bg.volume_renderer_nerf.integrate(bg_ray_samples_packed, rgb_samples_bg, weights_bg)
-        #combine
-        pred_rgb_bg = bg_transmittance.view(-1,1) * pred_rgb_bg
-        pred_rgb = pred_rgb + pred_rgb_bg
-    TIME_END("render_bg")    
-
-
-
-
     # return pred_rgb, sdf_gradients, weights, weights_sum, fg_ray_samples_packed
-    return pred_rgb, pred_rgb_bg, pred_normals, sdf_gradients, weights_sum, fg_ray_samples_packed
+    return pred_rgb, pred_normals, sdf_gradients, weights_sum, fg_ray_samples_packed
 
 #does forward pass through the model but breaks the rays up into chunks so that we don't run out of memory. Useful for rendering a full img
-def run_net_in_chunks(frame, chunk_size, args, hyperparams, model_sdf, model_rgb, model_bg, occupancy_grid, iter_nr_for_anneal, cos_anneal_ratio, forced_variance):
+def run_net_in_chunks(frame, chunk_size, args, hyperparams, model_sdf, model_rgb, occupancy_grid, iter_nr_for_anneal, cos_anneal_ratio, forced_variance):
     ray_origins_full, ray_dirs_full=model_rgb.create_rays(frame, rand_indices=None)
     nr_chunks=math.ceil( ray_origins_full.shape[0]/chunk_size)
     ray_origins_list=torch.chunk(ray_origins_full, nr_chunks)
     ray_dirs_list=torch.chunk(ray_dirs_full, nr_chunks)
     pred_rgb_list=[]
-    pred_rgb_bg_list=[]
     pred_weights_sum_list=[]
     pred_normals_list=[]
     for i in range(len(ray_origins_list)):
@@ -185,31 +162,28 @@ def run_net_in_chunks(frame, chunk_size, args, hyperparams, model_sdf, model_rgb
         nr_rays_chunk=ray_origins.shape[0]
     
         #run net 
-        pred_rgb, pred_rgb_bg, pred_normals, sdf_gradients, weights_sum, fg_ray_samples_packed  =run_net(args, hyperparams, ray_origins, ray_dirs, None, model_sdf, model_rgb, model_bg, None, occupancy_grid, iter_nr_for_anneal, cos_anneal_ratio, forced_variance)
+        pred_rgb,  pred_normals, sdf_gradients, weights_sum, fg_ray_samples_packed  =run_net(args, hyperparams, ray_origins, ray_dirs, None, model_sdf, model_rgb, None, occupancy_grid, iter_nr_for_anneal, cos_anneal_ratio, forced_variance)
 
 
         #accumulat the rgb and weights_sum
         pred_rgb_list.append(pred_rgb.detach())
-        pred_rgb_bg_list.append(pred_rgb_bg.detach()) if pred_rgb_bg is not None   else None
         pred_normals_list.append(pred_normals.detach())
         pred_weights_sum_list.append(weights_sum.detach())
 
 
     #concat
     pred_rgb=torch.cat(pred_rgb_list,0)
-    pred_rgb_bg=torch.cat(pred_rgb_bg_list,0) if pred_rgb_bg_list else None
     pred_weights_sum=torch.cat(pred_weights_sum_list,0)
     pred_normals=torch.cat(pred_normals_list,0)
 
     #reshape in imgs
     pred_rgb_img=lin2nchw(pred_rgb, frame.height, frame.width)
-    pred_rgb_bg_img=lin2nchw(pred_rgb_bg, frame.height, frame.width)   if pred_rgb_bg_list else None
     pred_weights_sum_img=lin2nchw(pred_weights_sum, frame.height, frame.width)
     pred_normals_img=lin2nchw(pred_normals, frame.height, frame.width)
 
-    return pred_rgb_img, pred_rgb_bg_img, pred_normals_img, pred_weights_sum_img
+    return pred_rgb_img, pred_normals_img, pred_weights_sum_img
    
-def run_net_sphere_traced(frame, args, hyperparams, model_sdf, model_rgb, model_bg, occupancy_grid, iter_nr_for_anneal, cos_anneal_ratio, forced_variance,  nr_sphere_traces, sdf_multiplier, sdf_converged_tresh):
+def run_net_sphere_traced(frame, args, hyperparams, model_sdf, model_rgb, occupancy_grid, iter_nr_for_anneal, cos_anneal_ratio, forced_variance,  nr_sphere_traces, sdf_multiplier, sdf_converged_tresh):
     ray_origins, ray_dirs=model_rgb.create_rays(frame, rand_indices=None)
   
     ray_end, ray_end_sdf, ray_end_gradient, geom_feat_end, traced_samples_packed=sphere_trace(nr_sphere_traces, ray_origins, ray_dirs, model_sdf, return_gradients=True, sdf_multiplier=sdf_multiplier, sdf_converged_tresh=sdf_converged_tresh, occupancy_grid=occupancy_grid)
@@ -233,14 +207,14 @@ def run_net_sphere_traced(frame, args, hyperparams, model_sdf, model_rgb, model_
     
 
     #bg we don't want for now
-    pred_rgb_bg_img=None
+
     pred_rgb_img=lin2nchw(pred_rgb_integrated, frame.height, frame.width)
     pred_normals_img=lin2nchw(pred_normals, frame.height, frame.width)
     pred_weights_sum_img=lin2nchw(pred_weights_sum, frame.height, frame.width)
 
 
 
-    return pred_rgb_img, pred_rgb_bg_img, pred_normals_img, pred_weights_sum_img
+    return pred_rgb_img, pred_normals_img, pred_weights_sum_img
 
 
 
@@ -277,7 +251,7 @@ def train(args, config_path, hyperparams, train_params, loader_train, experiment
     #model 
     model_sdf=SDF(in_channels=3, boundary_primitive=aabb, geom_feat_size_out=hyperparams.sdf_geom_feat_size, nr_iters_for_c2f=hyperparams.sdf_nr_iters_for_c2f).to("cuda")
     model_rgb=RGB(in_channels=3, boundary_primitive=aabb, geom_feat_size_in=hyperparams.sdf_geom_feat_size, nr_iters_for_c2f=hyperparams.rgb_nr_iters_for_c2f).to("cuda")
-    model_bg=NerfHash(4, boundary_primitive=aabb, nr_iters_for_c2f=hyperparams.background_nr_iters_for_c2f ).to("cuda") 
+
     if hyperparams.use_color_calibration:
         # model_colorcal=Colorcal(loader_train.nr_samples(), 0)
         model_colorcal=Colorcal(tensor_reel.rgb_reel.shape[0], 0)
@@ -289,12 +263,10 @@ def train(args, config_path, hyperparams, train_params, loader_train, experiment
         occupancy_grid=None
     model_sdf.train(phase.grad)
     model_rgb.train(phase.grad)
-    model_bg.train(phase.grad)
     
 
     params=[]
     params.append( {'params': model_sdf.parameters(), 'weight_decay': 0.0, 'lr': hyperparams.lr, 'name': "model_sdf"} )
-    params.append( {'params': model_bg.parameters(), 'weight_decay': 0.0, 'lr': hyperparams.lr, 'name': "model_bg" } )
     params.append( {'params': model_rgb.parameters_only_encoding(), 'weight_decay': 0.0, 'lr': hyperparams.lr, 'name': "model_rgb_only_encoding"} )
     params.append( {'params': model_rgb.parameters_all_without_encoding(), 'weight_decay': 0.0, 'lr': hyperparams.lr, 'name': "model_rgb_all_without_encoding"} )
     if model_colorcal is not None:
@@ -313,7 +285,7 @@ def train(args, config_path, hyperparams, train_params, loader_train, experiment
     while is_in_training_loop:
         model_sdf.train(phase.grad)
         model_rgb.train(phase.grad)
-        model_bg.train(phase.grad)
+        
         loss=0 
 
         TIME_START("fw_back")
@@ -341,7 +313,7 @@ def train(args, config_path, hyperparams, train_params, loader_train, experiment
 
 
             TIME_START("run_net")
-            pred_rgb, pred_rgb_bg, pred_normals, sdf_gradients, weights_sum, fg_ray_samples_packed  =run_net(args, hyperparams, ray_origins, ray_dirs, img_indices, model_sdf, model_rgb, model_bg, model_colorcal, occupancy_grid, iter_nr_for_anneal,  cos_anneal_ratio, forced_variance)
+            pred_rgb, pred_normals, sdf_gradients, weights_sum, fg_ray_samples_packed  =run_net(args, hyperparams, ray_origins, ray_dirs, img_indices, model_sdf, model_rgb, model_colorcal, occupancy_grid, iter_nr_for_anneal,  cos_anneal_ratio, forced_variance)
             TIME_END("run_net")
             
 
@@ -450,7 +422,6 @@ def train(args, config_path, hyperparams, train_params, loader_train, experiment
         if train_params.save_checkpoint() and phase.iter_nr%10000==0:
             model_sdf.save(checkpoint_path, experiment_name, phase.iter_nr)
             model_rgb.save(checkpoint_path, experiment_name, phase.iter_nr)
-            model_bg.save(checkpoint_path, experiment_name, phase.iter_nr, additional_name="_bg")
             if hyperparams.use_color_calibration:
                 model_colorcal.save(checkpoint_path, experiment_name, phase.iter_nr)
             if hyperparams.use_occupancy_grid:
@@ -464,7 +435,6 @@ def train(args, config_path, hyperparams, train_params, loader_train, experiment
             with torch.set_grad_enabled(False):
                 model_sdf.eval()
                 model_rgb.eval()
-                model_bg.eval()
 
                 if not in_process_of_sphere_init:
                     show_points(fg_ray_samples_packed.samples_pos,"samples_pos_fg")
@@ -486,9 +456,9 @@ def train(args, config_path, hyperparams, train_params, loader_train, experiment
                 use_volumetric_render=False
                 if use_volumetric_render:
                     chunk_size=50*50
-                    pred_rgb_img, pred_rgb_bg_img, pred_normals_img, pred_weights_sum_img=run_net_in_chunks(frame, chunk_size, args, hyperparams, model_sdf, model_rgb, model_bg, occupancy_grid, iter_nr_for_anneal, cos_anneal_ratio, forced_variance)
+                    pred_rgb_img,  pred_normals_img, pred_weights_sum_img=run_net_in_chunks(frame, chunk_size, args, hyperparams, model_sdf, model_rgb, occupancy_grid, iter_nr_for_anneal, cos_anneal_ratio, forced_variance)
                 else:
-                    pred_rgb_img, pred_rgb_bg_img, pred_normals_img, pred_weights_sum_img=run_net_sphere_traced(frame, args, hyperparams, model_sdf, model_rgb, model_bg, occupancy_grid, iter_nr_for_anneal, cos_anneal_ratio, forced_variance,  nr_sphere_traces=15, sdf_multiplier=0.9, sdf_converged_tresh=0.0002)
+                    pred_rgb_img,  pred_normals_img, pred_weights_sum_img=run_net_sphere_traced(frame, args, hyperparams, model_sdf, model_rgb, occupancy_grid, iter_nr_for_anneal, cos_anneal_ratio, forced_variance,  nr_sphere_traces=15, sdf_multiplier=0.9, sdf_converged_tresh=0.0002)
                 #vis normals
                 pred_normals_img_vis=(pred_normals_img+1.0)*0.5
                 pred_normals_img_vis_alpha=torch.cat([pred_normals_img_vis,pred_weights_sum_img],1)
@@ -503,7 +473,6 @@ def train(args, config_path, hyperparams, train_params, loader_train, experiment
             with torch.set_grad_enabled(False):
                 model_sdf.eval()
                 model_rgb.eval()
-                model_bg.eval()
 
                 # if isinstance(loader_train, DataLoaderPhenorobCP1):
                     # frame=random.choice(frames_train)
@@ -523,8 +492,8 @@ def train(args, config_path, hyperparams, train_params, loader_train, experiment
 
 
                 chunk_size=1000
-                pred_rgb_img, pred_rgb_bg_img, pred_normals_img, pred_weights_sum_img=run_net_in_chunks(frame, chunk_size, args, hyperparams, model_sdf, model_rgb, model_bg, occupancy_grid, iter_nr_for_anneal, cos_anneal_ratio, forced_variance)
-                # pred_rgb_img, pred_rgb_bg_img, pred_normals_img, pred_weights_sum_img=run_net_sphere_traced(frame, args, hyperparams, model_sdf, model_rgb, model_bg, occupancy_grid, iter_nr_for_anneal, cos_anneal_ratio, forced_variance,  nr_sphere_traces=15, sdf_multiplier=0.9, sdf_converged_tresh=0.0002)
+                pred_rgb_img, pred_normals_img, pred_weights_sum_img=run_net_in_chunks(frame, chunk_size, args, hyperparams, model_sdf, model_rgb, occupancy_grid, iter_nr_for_anneal, cos_anneal_ratio, forced_variance)
+                
                 #vis normals
                 pred_normals_img_vis=(pred_normals_img+1.0)*0.5
                 pred_normals_img_vis_alpha=torch.cat([pred_normals_img_vis,pred_weights_sum_img],1)
