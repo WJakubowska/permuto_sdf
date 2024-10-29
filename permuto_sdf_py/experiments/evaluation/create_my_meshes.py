@@ -57,6 +57,50 @@ config_path=os.path.join( os.path.dirname( os.path.realpath(__file__) ) , '../..
 
 
 
+
+import torch
+
+import sys
+import os
+import numpy as np
+from tqdm import tqdm
+import time
+import torchvision
+import argparse
+
+import easypbr
+from easypbr  import *
+from dataloaders import *
+
+import permuto_sdf
+from permuto_sdf  import TrainParams
+from permuto_sdf  import OccupancyGrid
+from permuto_sdf_py.models.models import SDF
+from permuto_sdf_py.models.models import RGB
+from permuto_sdf_py.models.models import NerfHash
+from permuto_sdf_py.models.models import Colorcal
+from permuto_sdf_py.utils.sdf_utils import extract_mesh_from_sdf_model
+from permuto_sdf_py.utils.common_utils import create_dataloader
+from permuto_sdf_py.utils.common_utils import create_bb_for_dataset
+from permuto_sdf_py.utils.common_utils import nchw2lin
+from permuto_sdf_py.utils.common_utils import lin2nchw
+from permuto_sdf_py.utils.permuto_sdf_utils import load_from_checkpoint
+from permuto_sdf_py.train_permuto_sdf import run_net_in_chunks
+from permuto_sdf_py.train_permuto_sdf import HyperParamsPermutoSDF
+import permuto_sdf_py.paths.list_of_checkpoints as list_chkpts
+import permuto_sdf_py.paths.list_of_training_scenes as list_scenes
+
+
+
+config_file="train_permuto_sdf.cfg"
+
+torch.manual_seed(0)
+torch.set_default_tensor_type(torch.cuda.FloatTensor)
+torch.set_grad_enabled(False)
+config_path=os.path.join( os.path.dirname( os.path.realpath(__file__) ) , '../../../config', config_file)
+
+
+
 def extract_mesh_and_transform_to_original_tf(model, nr_points_per_dim, loader, aabb):
 
     if isinstance(model, SDF):
@@ -82,7 +126,6 @@ def extract_mesh_and_transform_to_original_tf(model, nr_points_per_dim, loader, 
         extracted_mesh.apply_model_matrix_to_cpu(True)
 
     return extracted_mesh
-
 
 
 def run():
