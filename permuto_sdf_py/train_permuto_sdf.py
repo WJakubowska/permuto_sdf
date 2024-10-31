@@ -557,8 +557,10 @@ def run():
     args = parser.parse_args()
     with_viewer=not args.no_viewer
 
-    # config_file="train_permuto_sdf.cfg"
-    config_file = args.config_file
+    if args.config_file:
+        config_file = args.config_file
+    else:
+        config_file="train_permuto_sdf.cfg"
 
     torch.manual_seed(0)
     torch.set_default_tensor_type(torch.cuda.FloatTensor)

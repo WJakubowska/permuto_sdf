@@ -167,14 +167,14 @@ def run():
     #params for rendering
     model_sdf=SDF(in_channels=3, boundary_primitive=aabb, geom_feat_size_out=hyperparams.sdf_geom_feat_size, nr_iters_for_c2f=hyperparams.sdf_nr_iters_for_c2f).to("cuda")
     model_rgb=RGB(in_channels=3, boundary_primitive=aabb, geom_feat_size_in=hyperparams.sdf_geom_feat_size, nr_iters_for_c2f=hyperparams.rgb_nr_iters_for_c2f).to("cuda")
-    
+    model_bg=NerfHash(4, boundary_primitive=aabb, nr_iters_for_c2f=hyperparams.background_nr_iters_for_c2f ).to("cuda") 
     if hyperparams.use_occupancy_grid:
         occupancy_grid=OccupancyGrid(256, 1.0, [0,0,0])
     else:
         occupancy_grid=None
     model_sdf.train(False)
     model_rgb.train(False)
-    
+    model_bg.train(False)
 
     scenes_list=list_scenes.datasets[args.dataset]
     
@@ -192,7 +192,7 @@ def run():
         ckpt_path_full=os.path.join(checkpoint_path,ckpt_for_scene,"models")
 
         #load
-        load_from_checkpoint(ckpt_path_full, model_sdf, model_rgb, occupancy_grid)        
+        load_from_checkpoint(ckpt_path_full, model_sdf, model_rgb, model_bg, occupancy_grid)        
 
         #extract my mesh
         extracted_mesh=extract_mesh_and_transform_to_original_tf(model_sdf, nr_points_per_dim, loader, aabb)
