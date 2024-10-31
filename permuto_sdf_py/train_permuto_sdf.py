@@ -66,15 +66,15 @@ else:
 # torch.backends.cuda.matmul.allow_tf32 = True
 
 
-config_file="train_permuto_sdf.cfg"
+# config_file="train_permuto_sdf.cfg"
 
-torch.manual_seed(0)
-torch.set_default_tensor_type(torch.cuda.FloatTensor)
-config_path=os.path.join( os.path.dirname( os.path.realpath(__file__) ) , '../config', config_file)
+# torch.manual_seed(0)
+# torch.set_default_tensor_type(torch.cuda.FloatTensor)
+# config_path=os.path.join( os.path.dirname( os.path.realpath(__file__) ) , '../config', config_file)
 
 
-# #initialize the parameters used for training
-train_params=TrainParams.create(config_path)    
+# # #initialize the parameters used for training
+# train_params=TrainParams.create(config_path)    
 class HyperParamsPermutoSDF:
     s_mult=1.0 #multiplier for the scheduler. Lower values mean faster convergance at the cost of some accuracy
     lr= 1e-3
@@ -104,6 +104,7 @@ class HyperParamsPermutoSDF:
     background_nr_iters_for_c2f=1
     target_nr_of_samples=512*(64+16+16)             #the nr of rays are dynamically changed so that we use this nr of samples in a forward pass. you can reduce this for faster training or if your GPU has little VRAM
 hyperparams=HyperParamsPermutoSDF()
+
 
 
 
@@ -255,7 +256,6 @@ def train(args, config_path, hyperparams, train_params, loader_train, experiment
     
 
     first_time=True
-    start_time = time.time()
 
     if first_time and with_viewer and hardcoded_cam_init:
         view.m_camera.from_string(" 1.16767 0.373308  0.46992 -0.126008  0.545201 0.0833038 0.82458 -0.00165809  -0.0244027  -0.0279725 60 0.0502494 5024.94")
@@ -425,10 +425,6 @@ def train(args, config_path, hyperparams, train_params, loader_train, experiment
         if phase.iter_nr==hyperparams.iter_finish_training+1:
             print("Finished training at iter ", phase.iter_nr)
             is_in_training_loop=False
-            end_time = time.time()
-            dt = end_time - start_time
-            dt = dt /60 
-            print("Training time: ", dt, " min")
             break 
 
 
@@ -536,10 +532,6 @@ def train(args, config_path, hyperparams, train_params, loader_train, experiment
         # if with_viewer:
         #     view.update()
       
-
-                   
-
-
                   
 
 
@@ -551,6 +543,7 @@ def train(args, config_path, hyperparams, train_params, loader_train, experiment
 
 def run():
 
+
     #argparse
     parser = argparse.ArgumentParser(description='Train sdf and color')
     parser.add_argument('--dataset', required=True, help='Dataset like bmvs, dtu, multiface')
@@ -560,8 +553,22 @@ def run():
     parser.add_argument('--exp_info', default="", help='Experiment info string useful for distinguishing one experiment for another')
     parser.add_argument('--with_mask', action='store_true', help="Set this to true in order to train with a mask")
     parser.add_argument('--no_viewer', action='store_true', help="Set this to true in order disable the viewer")
+    parser.add_argument('--config_file', type=str)
     args = parser.parse_args()
     with_viewer=not args.no_viewer
+
+    if args.config_file:
+        config_file = args.config_file
+    else:
+        config_file="train_permuto_sdf.cfg"
+
+    torch.manual_seed(0)
+    torch.set_default_tensor_type(torch.cuda.FloatTensor)
+    config_path=os.path.join( os.path.dirname( os.path.realpath(__file__) ) , '../config', config_file)
+
+
+    # #initialize the parameters used for training
+    train_params=TrainParams.create(config_path)    
 
     #get the checkpoints path which will be at the root of the permuto_sdf package 
     permuto_sdf_root=os.path.dirname(os.path.abspath(permuto_sdf.__file__))
