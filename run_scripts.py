@@ -23,6 +23,6 @@ for i, params in enumerate(parameters_list):
     
     output_file = f"output_{i+1}.txt"
     with open(output_file, 'w') as f:
-        subprocess.run(command, shell=True, stdout=f, stderr=subprocess.STDOUT)
+        subprocess.run(command, shell=True, stdout=f, stderr=subprocess.STDOUT, text=True)
 
     print(f"RUN: {i+1}: SAVE: {output_file}")
