@@ -70,7 +70,6 @@ import argparse
 
 import easypbr
 from easypbr  import *
-from easypbr import Mesh
 from dataloaders import *
 
 import permuto_sdf
