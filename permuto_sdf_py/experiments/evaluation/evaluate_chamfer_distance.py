@@ -192,7 +192,7 @@ def run():
     results_path=os.path.join(permuto_sdf_root, "results")
     my_meshes_path=os.path.join(results_path,"output_permuto_sdf_meshes")
     #path for gt
-    gt_meshes_path="/media/rosu/Data/data/dtu/data_prepared_for_gt"
+    gt_meshes_path="/mnt/data/permuto_sdf_data/GT_DTU/"
     #outputs path where to dump the results after the evaluation
     output_path=os.path.join(results_path,"output_eval_chamfer_dist",dataset,config_training)
     os.makedirs( output_path, exist_ok=True)

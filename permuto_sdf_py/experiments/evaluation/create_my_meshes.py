@@ -101,7 +101,7 @@ config_path=os.path.join( os.path.dirname( os.path.realpath(__file__) ) , '../..
 
 
 
-def extract_mesh_and_transform_to_original_tf(model, nr_points_per_dim, loader, aabb):
+def extract_mesh_and_transform_to_original_tf(model, nr_points_per_dim, loader, aabb, calculate_metrics_DTU = False):
 
     if isinstance(model, SDF):
         extracted_mesh=extract_mesh_from_sdf_model(model, nr_points_per_dim=nr_points_per_dim, min_val=-0.5, max_val=0.5)
@@ -111,15 +111,14 @@ def extract_mesh_and_transform_to_original_tf(model, nr_points_per_dim, loader, 
         extracted_mesh=extract_mesh_from_sdf_model_neus(model, nr_points_per_dim=nr_points_per_dim, min_val=-0.5, max_val=0.5)
         
 
-    # extracted_mesh=aabb.remove_points_outside(extracted_mesh)
     #remove points outside the aabb
     points=torch.from_numpy(extracted_mesh.V).float().cuda()
     is_valid=aabb.check_point_inside_primitive(points)
     extracted_mesh.remove_marked_vertices( is_valid.flatten().bool().cpu().numpy() ,True)
     extracted_mesh.recalculate_min_max_height()
-   
+
     #transform the extracted mesh from the easypbr coordinate frame to the dtu one so that it matches the gt
-    if isinstance(loader, DataLoaderDTU):
+    if isinstance(loader, DataLoaderDTU) and calculate_metrics_DTU:
         tf_easypbr_dtu=loader.get_tf_easypbr_dtu()
         tf_dtu_easypbr=tf_easypbr_dtu.inverse()
         extracted_mesh.transform_model_matrix(tf_dtu_easypbr.to_double())
@@ -198,11 +197,11 @@ def run():
         extracted_mesh=extract_mesh_and_transform_to_original_tf(model_sdf, nr_points_per_dim, loader, aabb)
         
         #output path
-        out_mesh_path=os.path.join(permuto_sdf_root,"results/output_permuto_sdf_meshes",args.dataset, config_training)
+        out_mesh_path=os.path.join(permuto_sdf_root,"results/output_permuto_sdf_meshes" ,args.dataset, config_training)
         os.makedirs(out_mesh_path, exist_ok=True)
 
         # #write my mesh
-        extracted_mesh.save_to_file(os.path.join(out_mesh_path, scan_name+".ply") )
+        extracted_mesh.save_to_file(os.path.join(out_mesh_path, scan_name+".obj") )
 
 
 
